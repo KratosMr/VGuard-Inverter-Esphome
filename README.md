@@ -1,21 +1,30 @@
-# ⚡ V-Guard UPS / Inverter UART Reverse Engineering
+# ⚡ V-Guard UPS / Inverter UART Reverse Engineering Guide
 
-Reverse engineering notes for the UART protocol used between the ESP32 communication board and the main inverter MCU found in V-Guard/OEM UPS systems.
-
-Includes:
-
-- 🔍 UART packet structure
-- 🧭 Register map
-- 📊 Telemetry decoding
-- 🎛️ Write commands
-- ☁️ MQTT findings
-- 🏠 ESPHome integration
-- 🔄 Live polling
-- ⚙️ Settings synchronization
+> A practical guide to understanding and replacing the OEM ESP32 communication module used in V-Guard/OEM UPS and inverter systems.
 
 ---
 
-# 🏗️ Architecture
+# 📖 Overview
+
+This guide documents the reverse engineering of the UART communication between:
+
+- 🧠 Main inverter MCU
+- 📡 ESP32 WiFi communication board
+- ☁️ OEM MQTT cloud infrastructure
+
+The goal was to:
+
+- understand the UART protocol
+- decode telemetry
+- control inverter settings
+- replace the OEM cloud
+- integrate with ESPHome/Home Assistant
+
+---
+
+# 🏗️ System Architecture
+
+The OEM design works like this:
 
 ```text
 Mobile App
@@ -27,12 +36,28 @@ ESP32 Communication Board
 Main Inverter MCU
 ```
 
-The MCU does not have WiFi or MQTT support.
+The inverter MCU itself:
+- has no WiFi
+- has no MQTT
+- has no cloud logic
 
-The ESP32 acts as:
-- 🔄 UART polling bridge
-- ☁️ MQTT client
-- 📱 cloud/app interface
+The ESP32 board acts as a bridge between:
+- UART
+- MQTT cloud
+- mobile app
+
+---
+
+# 🔍 Reverse Engineering Process
+
+The protocol was discovered by:
+
+- sniffing UART traffic
+- observing polling patterns
+- changing inverter settings
+- correlating packets with UI changes
+- dumping OEM ESP32 firmware
+- extracting MQTT configuration
 
 ---
 
@@ -47,11 +72,13 @@ The ESP32 acts as:
 
 ---
 
-# 📡 UART Protocol
+# 📡 UART Packet Structure
 
-## 📥 Read Request
+## 📥 Read Request (ESP → MCU)
 
-ESP → MCU
+The ESP continuously polls registers from the MCU.
+
+Packet format:
 
 ```text
 FF FF FF [REGISTER] 0C 01 FF FF
@@ -63,20 +90,47 @@ Example:
 FF FF FF 06 0C 01 FF FF
 ```
 
+Meaning:
+
+```text
+Read register 0x06
+```
+
 ---
 
-## 📤 Read Response
+## 📤 Read Response (MCU → ESP)
 
-MCU → ESP
+The MCU replies with:
 
 ```text
 FF FF FF [REGISTER] 0C 01 [LOW] [HIGH]
 ```
 
-Little-endian payload:
+Payload is little-endian.
+
+Decode logic:
 
 ```python
 raw = (high << 8) | low
+```
+
+Example:
+
+```text
+FF FF FF 06 0C 01 29 05
+```
+
+Decoded:
+
+```text
+0x0529 = 1321
+1321 / 100 = 13.21V
+```
+
+Meaning:
+
+```text
+Battery Voltage = 13.21V
 ```
 
 ---
@@ -88,11 +142,45 @@ raw = (high << 8) | low
 | `0x0C` | 📊 Register read / telemetry |
 | `0x0B` | ❤️ Heartbeat / keepalive |
 
-Example:
+Heartbeat example:
 
 ```text
 FF FF FF C8 0B 01 FF FF
 ```
+
+---
+
+# 🔄 Polling Mechanism
+
+The ESP32 continuously polls the MCU.
+
+## 💤 Idle Polling
+
+During idle state:
+
+```text
+60
+1E
+90
+8A
+40
+50
+42
+52
+...
+```
+
+---
+
+## 📱 App Open Polling
+
+When the mobile app opens:
+
+- polling frequency increases
+- more registers queried
+- nearly full register map scanned
+
+This revealed most telemetry and settings registers.
 
 ---
 
@@ -166,7 +254,7 @@ FF FF FF C8 0B 01 FF FF
 
 # ☁️ MQTT Findings
 
-Firmware strings revealed:
+Firmware extraction revealed:
 
 ```ini
 BrokerAddress = vguardbox.com
@@ -175,75 +263,88 @@ ServerUname   = vguard
 Serverpass    = vguard1234
 ```
 
-Meaning:
+This confirms:
 
-- 🔄 ESP32 polls MCU over UART
-- ☁️ publishes telemetry over MQTT
-- 📱 receives app commands over MQTT
-- ⚙️ converts commands into UART write packets
+- ESP32 polls MCU via UART
+- ESP32 publishes telemetry via MQTT
+- mobile app communicates through MQTT
+- app commands become UART write packets
 
 ---
 
-# 🏠 ESPHome Integration
+# 🧠 OEM Firmware Findings
 
-Working ESPHome implementation includes:
+The OEM ESP firmware:
 
-## 📊 Sensors
+✅ continuously polls the MCU  
+✅ decodes UART packets locally  
+✅ publishes MQTT telemetry  
+✅ receives remote commands  
+✅ synchronizes settings  
 
-- ⚡ Grid Voltage
-- 🔋 Battery Voltage
-- 🔌 Output Voltage
-- 🔋 Charge Current
-- 🔄 Discharge Current
-- ☀️ Solar Voltage
-- ☀️ Solar Current
-- ☀️ Solar Power
-- 🔋 Battery %
-- 📊 Load %
+The MCU itself only understands:
+- UART register reads
+- UART register writes
 
-## 🎛️ Settings Controls
+---
 
-- 🔄 Inverter Mode
-- 🔔 Mains Buzzer
-- 📊 Output Limit
-- 🔌 Appliance Mode
-- ✂️ Grid Force Cut
-- ⚡ Turbo Charging
-- 🚨 Load Alarm Threshold
-- 🔋 Advanced Low Battery Alarm
-- ☀️ Daytime Load Usage
+# 🏠 ESPHome Replacement
 
-### ✅ Features
+A complete ESPHome replacement was successfully implemented using:
 
-- 🔁 bidirectional synchronization
-- 📡 live polling
-- 🏠 Home Assistant entities
-- 🔒 local-only control
-- ❌ no OEM cloud required
+- ESP32-C3-DevKitM-1
+- UART polling
+- Home Assistant entities
+- live telemetry
+- writable settings
+- bidirectional synchronization
+
+Features:
+
+✅ local-only control  
+✅ no OEM cloud required  
+✅ no mobile app required  
+✅ real-time telemetry  
+✅ Home Assistant integration  
 
 ---
 
 # 🔍 Key Findings
 
-- 📡 MCU protocol is plaintext UART
+- 📡 protocol is plaintext UART
 - 📦 fixed 8-byte packets
 - ❌ no checksum/CRC observed
 - 🔄 ESP continuously polls MCU
 - ✍️ settings are fully writable
-- 📱 app opening increases polling rate
 - ☁️ ESP acts as UART ↔ MQTT bridge
+- 📱 app opening increases polling frequency
 
 ---
 
 # ⚠️ Safety Warning
 
-Unknown register writes may:
-- ❌ disable protections
-- 🔥 damage batteries
-- ⚡ alter charging behavior
-- 💥 crash inverter MCU
+Writing unknown registers may:
+
+- disable protections
+- alter charging behavior
+- damage batteries
+- crash inverter MCU
 
 Only documented registers should be modified.
+
+---
+
+# 🚀 Future Work
+
+Potential future improvements:
+
+- full register discovery
+- fault code mapping
+- MQTT topic extraction
+- OTA analysis
+- web dashboard
+- native ESPHome component
+- InfluxDB/Grafana integration
 
 ---
 
@@ -254,4 +355,4 @@ Unofficial reverse engineering project.
 Not affiliated with:
 - V-Guard
 - OEM vendors
-- original firmware authors.
+- original firmware authors

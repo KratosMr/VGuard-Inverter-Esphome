@@ -254,17 +254,6 @@ This revealed most telemetry and settings registers.
 
 # ☁️ MQTT Findings
 
-Firmware extraction revealed:
-
-```ini
-BrokerAddress = vguardbox.com
-BrokerPort    = 8883
-ServerUname   = vguard
-Serverpass    = vguard1234
-```
-
-This confirms:
-
 - ESP32 polls MCU via UART
 - ESP32 publishes telemetry via MQTT
 - mobile app communicates through MQTT

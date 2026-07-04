@@ -1,0 +1,673 @@
+esphome:
+  name: vguard-ups
+  friendly_name: VGuard UPS
+  platformio_options:
+   board_build.f_flash: 40000000L
+   board_build.flash_mode: dio
+   board_build.flash_size: 4MB
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+wifi:
+
+
+logger:
+  level: INFO
+  baud_rate: 0
+
+api:
+  encryption:
+
+
+ota:
+
+
+status_led:
+  pin:
+    number: GPIO10
+    inverted: true
+
+
+# =========================================================
+# SENSORS
+# =========================================================
+
+sensor:
+
+  - platform: template
+    name: Grid Voltage
+    id: grid_voltage
+    unit_of_measurement: V
+    accuracy_decimals: 1
+    icon: mdi:transmission-tower
+
+  - platform: template
+    name: Battery Voltage
+    id: battery_voltage
+    unit_of_measurement: V
+    accuracy_decimals: 2
+    icon: mdi:battery
+
+  - platform: template
+    name: Output Voltage
+    id: output_voltage
+    unit_of_measurement: V
+    accuracy_decimals: 1
+    icon: mdi:flash
+
+  - platform: template
+    name: Discharge Current
+    id: discharge_current
+    unit_of_measurement: A
+    accuracy_decimals: 1
+    icon: mdi:current-dc
+
+  - platform: template
+    name: Charge Current
+    id: charge_current
+    unit_of_measurement: A
+    accuracy_decimals: 1
+    icon: mdi:current-dc
+
+  - platform: template
+    name: Battery Percent
+    id: battery_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    icon: mdi:battery-high
+
+  - platform: template
+    name: Load Percent
+    id: load_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    icon: mdi:gauge
+
+  - platform: template
+    name: Solar Current
+    id: solar_current
+    unit_of_measurement: A
+    accuracy_decimals: 2
+    icon: mdi:solar-power
+
+  - platform: template
+    name: Solar Voltage
+    id: solar_voltage
+    unit_of_measurement: V
+    accuracy_decimals: 2
+    icon: mdi:solar-panel
+
+  - platform: template
+    name: Solar Power
+    id: solar_power
+    unit_of_measurement: W
+    accuracy_decimals: 1
+    icon: mdi:weather-sunny
+
+# =========================================================
+# SWITCHES
+# =========================================================
+
+switch:
+
+  # -------------------------------------------------------
+  # MAINS BUZZER
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Mains Buzzer
+    id: mains_buzzer_switch
+    restore_mode: ALWAYS_ON
+    icon: mdi:volume-high
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0x00,0x00,0x20,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x02,0x00,0x20,0x0C,0x00,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # APPLIANCE MODE
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Appliance Mode
+    id: appliance_mode_switch
+    icon: mdi:power-plug
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0x01,0x00,0x26,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x00,0x00,0x26,0x0C,0x00,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # GRID FORCE CUT
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Grid Force Cut
+    id: grid_force_cut_switch
+    icon: mdi:transmission-tower-off
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0xF0,0x00,0x2A,0x0C,0x00,0xFF,0xFF]
+      - uart.write: [0xFF,0x01,0x00,0x28,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x00,0x00,0x2A,0x0C,0x00,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # TURBO CHARGING
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Turbo Charging
+    id: turbo_charging_switch
+    icon: mdi:battery-charging-high
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0x01,0x00,0x30,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x00,0x00,0x30,0x0C,0x00,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # ADVANCED LOW BATTERY ALARM
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Advanced Low Battery Alarm
+    id: advanced_low_battery_alarm_switch
+    restore_mode: ALWAYS_ON
+    icon: mdi:battery-alert
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0x4C,0x04,0x3E,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x64,0x00,0x3E,0x0C,0x00,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # DAYTIME LOAD USAGE
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Daytime Load Usage
+    id: daytime_load_usage_switch
+    icon: mdi:weather-sunny
+    internal: True
+    optimistic: true
+
+    turn_on_action:
+      - uart.write: [0xFF,0x00,0x00,0x84,0x0C,0x00,0xFF,0xFF]
+
+    turn_off_action:
+      - uart.write: [0xFF,0x01,0x00,0x84,0x0C,0x00,0xFF,0xFF]
+
+
+text_sensor:
+
+  - platform: template
+    name: Grid Force Cut Remaining Time
+    id: grid_force_cut_remaining
+    icon: mdi:timer
+# =========================================================
+# SELECTS
+# =========================================================
+
+select:
+
+  # -------------------------------------------------------
+  # INVERTER MODE
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Inverter Mode Select
+    id: inverter_mode_select
+    optimistic: true
+    icon: mdi:power-settings
+
+    options:
+      - Normal Mode
+      - UPS Mode
+      - Equipment Mode
+
+    set_action:
+      lambda: |-
+
+        if (x == "Normal Mode") {
+          uint8_t cmd[] = {0xFF,0x00,0x00,0x18,0x0C,0x00,0xFF,0xFF};
+          id(inverter_uart).write_array(cmd, 8);
+        }
+
+        else if (x == "UPS Mode") {
+          uint8_t cmd[] = {0xFF,0x01,0x00,0x18,0x0C,0x00,0xFF,0xFF};
+          id(inverter_uart).write_array(cmd, 8);
+        }
+
+        else if (x == "Equipment Mode") {
+          uint8_t cmd[] = {0xFF,0x02,0x00,0x18,0x0C,0x00,0xFF,0xFF};
+          id(inverter_uart).write_array(cmd, 8);
+        }
+
+  - platform: template
+    name: Load Exceed Alarm Threshold
+    id: load_alarm_threshold_select
+    icon: mdi:alarm-light
+    optimistic: true
+
+    options:
+      - "50%"
+      - "60%"
+      - "70%"
+      - "80%"
+      - "90%"
+      - "100%"
+
+    set_action:
+
+      - lambda: |-
+
+          if (x == "50%") {
+            uint8_t cmd[] = {0xFF,0x32,0x00,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+          else if (x == "60%") {
+            uint8_t cmd[] = {0xFF,0x3C,0x00,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+          else if (x == "70%") {
+            uint8_t cmd[] = {0xFF,0x46,0x00,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+          else if (x == "80%") {
+            uint8_t cmd[] = {0xFF,0x50,0x00,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+          else if (x == "90%") {
+            uint8_t cmd[] = {0xFF,0x5A,0x00,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+          else if (x == "100%") {
+            uint8_t cmd[] = {0xFF,0xF4,0x01,0x3A,0x0C,0x00,0xFF,0xFF};
+            id(inverter_uart).write_array(cmd, 8);
+          }
+
+  # -------------------------------------------------------
+  # OUTPUT LIMIT
+  # -------------------------------------------------------
+
+  - platform: template
+    name: Output Limit Select
+    id: output_limit_select
+    optimistic: true
+    icon: mdi:speedometer
+
+    options:
+      - 0%
+      - 20%
+      - 40%
+      - 50%
+      - 60%
+      - 90%
+      - 100%
+
+    set_action:
+      lambda: |-
+
+        uint8_t value = 0x01;
+
+        if (x == "0%") value = 0x01;
+        else if (x == "20%") value = 0x02;
+        else if (x == "40%") value = 0x03;
+        else if (x == "50%") value = 0x04;
+        else if (x == "60%") value = 0x05;
+        else if (x == "90%") value = 0x06;
+        else if (x == "100%") value = 0x07;
+
+        uint8_t cmd[] = {0xFF,value,0x00,0x24,0x0C,0x00,0xFF,0xFF};
+
+        id(inverter_uart).write_array(cmd, 8);
+
+# =========================================================
+# POLLING
+# =========================================================
+
+interval:
+
+  # -------------------------------------------------------
+  # LIVE VALUES EVERY 5 SECONDS
+  # -------------------------------------------------------
+
+  - interval: 5s
+    then:
+
+      - uart.write: [0xFF,0xFF,0xFF,0x06,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x08,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x0A,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x0C,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x10,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x3C,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x2C,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x76,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x78,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x38,0x0C,0x01,0xFF,0xFF]
+      - delay: 100ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x2A,0x0C,0x01,0xFF,0xFF]
+
+  # -------------------------------------------------------
+  # SETTINGS EVERY 1 SECOND
+  # -------------------------------------------------------
+
+  - interval: 1s
+    then:
+
+      - uart.write: [0xFF,0xFF,0xFF,0x18,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x20,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x24,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+       
+      - uart.write: [0xFF,0xFF,0xFF,0x26,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x28,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x30,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x3A,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x3E,0x0C,0x01,0xFF,0xFF]
+      - delay: 50ms
+
+      - uart.write: [0xFF,0xFF,0xFF,0x84,0x0C,0x01,0xFF,0xFF]
+
+# =========================================================
+# UART DEBUG RX PARSER
+# =========================================================
+
+uart:
+  id: inverter_uart
+  tx_pin: GPIO18
+  rx_pin: GPIO19
+  baud_rate: 9600
+  data_bits: 8
+  stop_bits: 1
+  parity: NONE
+  rx_buffer_size: 1024
+
+  debug:
+    direction: RX
+    dummy_receiver: true
+
+    after:
+      bytes: 8
+
+    sequence:
+      - lambda: |-
+
+          if (bytes.size() < 8) return;
+
+          if (
+            bytes[0] != 0xFF ||
+            bytes[1] != 0xFF ||
+            bytes[2] != 0xFF
+          ) {
+            return;
+          }
+
+          uint8_t reg = bytes[3];
+
+          uint16_t raw =
+            (bytes[7] << 8) |
+            bytes[6];
+
+          // =====================================================
+          // LIVE VALUES
+          // =====================================================
+
+          if (reg == 0x08) {
+            id(grid_voltage).publish_state(raw / 10.0);
+          }
+
+          else if (reg == 0x06) {
+            id(battery_voltage).publish_state(raw / 100.0);
+          }
+
+          else if (reg == 0x0A) {
+            id(output_voltage).publish_state(raw / 10.0);
+          }
+
+          else if (reg == 0x0C) {
+            id(discharge_current).publish_state(raw / 10.0);
+          }
+
+          else if (reg == 0x10) {
+            id(charge_current).publish_state(raw / 10.0);
+          }
+
+          else if (reg == 0x3C) {
+            id(battery_percent).publish_state(raw / 278.0);
+          }
+
+          else if (reg == 0x2C) {
+            id(load_percent).publish_state(raw);
+          }
+
+          else if (reg == 0x76) {
+            id(solar_current).publish_state(raw / 100.0);
+          }
+
+          else if (reg == 0x78) {
+            id(solar_voltage).publish_state(raw / 100.0);
+          }
+
+          else if (reg == 0x38) {
+            id(solar_power).publish_state(raw / 10.0);
+          }
+
+          // =====================================================
+          // INVERTER MODE
+          // =====================================================
+
+          else if (reg == 0x18) {
+
+            if (raw == 0x0000)
+              id(inverter_mode_select).publish_state("Normal Mode");
+
+            else if (raw == 0x0001)
+              id(inverter_mode_select).publish_state("UPS Mode");
+
+            else if (raw == 0x0002)
+              id(inverter_mode_select).publish_state("Equipment Mode");
+          }
+
+          // =====================================================
+          // MAINS BUZZER
+          // =====================================================
+
+          else if (reg == 0x20) {
+
+            if (raw == 0x0000)
+              id(mains_buzzer_switch).publish_state(true);
+
+            else if (raw == 0x0002)
+              id(mains_buzzer_switch).publish_state(false);
+          }
+
+          // =====================================================
+          // OUTPUT LIMIT
+          // =====================================================
+
+          else if (reg == 0x24) {
+
+            std::string value = "";
+
+            if (raw == 0x0001) value = "0%";
+            else if (raw == 0x0002) value = "20%";
+            else if (raw == 0x0003) value = "40%";
+            else if (raw == 0x0004) value = "50%";
+            else if (raw == 0x0005) value = "60%";
+            else if (raw == 0x0006) value = "90%";
+            else if (raw == 0x0007) value = "100%";
+
+            if (!value.empty()) {
+              id(output_limit_select).publish_state(value);
+            }
+            ESP_LOGD("uart", "Output Limit RAW: %u", raw);
+          }
+
+          // =====================================================
+          // APPLIANCE MODE
+          // =====================================================
+
+          else if (reg == 0x26) {
+
+            if (raw == 0x0001)
+              id(appliance_mode_switch).publish_state(true);
+
+            else if (raw == 0x0000)
+              id(appliance_mode_switch).publish_state(false);
+          }
+
+          // =====================================================
+          // GRID FORCE CUT
+          // =====================================================
+
+          else if (reg == 0x28) {
+
+            if (raw == 0x0001)
+              id(grid_force_cut_switch).publish_state(true);
+
+            else if (raw == 0x0000)
+              id(grid_force_cut_switch).publish_state(false);
+          }
+
+          // =====================================================
+          // TURBO CHARGING
+          // =====================================================
+
+          else if (reg == 0x30) {
+
+            if (raw == 0x0001)
+              id(turbo_charging_switch).publish_state(true);
+
+            else if (raw == 0x0000)
+              id(turbo_charging_switch).publish_state(false);
+          }
+
+          // =====================================================
+          // LOAD EXCEED ALARM THRESHOLD
+          // =====================================================
+
+          else if (reg == 0x3A) {
+
+            std::string value = "Unknown";
+
+            if (raw == 0x0032)
+              value = "50%";
+
+            else if (raw == 0x003C)
+              value = "60%";
+
+            else if (raw == 0x0046)
+              value = "70%";
+
+            else if (raw == 0x0050)
+              value = "80%";
+
+            else if (raw == 0x005A)
+              value = "90%";
+
+            else if (raw == 0x01F4)
+              value = "100%";
+
+            id(load_alarm_threshold_select).publish_state(value);
+          }
+
+          // =====================================================
+          // ADVANCED LOW BATTERY ALARM
+          // =====================================================
+
+          else if (reg == 0x3E) {
+
+            if (raw == 0x044C)
+              id(advanced_low_battery_alarm_switch).publish_state(true);
+
+            else if (raw == 0x0064)
+              id(advanced_low_battery_alarm_switch).publish_state(false);
+          }
+
+          // =====================================================
+          // DAYTIME LOAD USAGE
+          // =====================================================
+
+          else if (reg == 0x84) {
+
+            if (raw == 0x0000)
+              id(daytime_load_usage_switch).publish_state(true);
+
+            else if (raw == 0x0001)
+              id(daytime_load_usage_switch).publish_state(false);
+          }
+
+          else if (reg == 0x2A) {
+            char buffer[32];
+            if (raw == 0) {
+              snprintf(buffer, sizeof(buffer), "Disabled");
+            }
+            else {
+              snprintf(buffer, sizeof(buffer), "%u min", raw);
+            }
+            id(grid_force_cut_remaining).publish_state(buffer);
+          }
+
+          // =====================================================
+          // DEBUG LOG
+          // =====================================================
+
+          ESP_LOGD(
+            "uart",
+            "REG: 0x%02X RAW: %u",
+            reg,
+            raw
+          );
